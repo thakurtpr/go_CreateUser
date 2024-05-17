@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/smtp"
 	"strings"
+	"github.com/sethvargo/go-password/password"
+	"github.com/jaswdr/faker/v2"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -19,8 +21,9 @@ type User struct {
 	LastName  string `json:"lastname"`
 	Email     string `json:"email"`
 	Enabled   bool   `json:"enabled"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
+	PhoneNo string `json:"phoneno"`
+	// Username  string `json:"username"`
+	// Password  string `json:"password"`
 }
 
 type Credential struct {
@@ -67,6 +70,9 @@ func getUserId(Username string, accessToken string) (interface{}, error) {
 	url := "https://34.93.102.191:18080/auth/admin/realms/camunda-platform/users"
 	method := "GET"
 	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
 	req.Header.Add("Authorization", accessToken)
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := client.Do(req)
@@ -95,6 +101,9 @@ func createUserHandler(response http.ResponseWriter, request *http.Request) {
 
 	var incBodyData User
 
+	fake := faker.New()
+	username:=fake.Person().FirstName()
+	fmt.Println(username)
 	json.NewDecoder(request.Body).Decode(&incBodyData)
 	url := "https://34.93.102.191:18080/auth/admin/realms/camunda-platform/users"
 	method := "POST"
@@ -104,7 +113,7 @@ func createUserHandler(response http.ResponseWriter, request *http.Request) {
 		"email": "%s",
 		"enabled": true,
 		"username": "%s"
-	}`, incBodyData.FirstName, incBodyData.LastName, incBodyData.Email, incBodyData.Username)
+	}`, incBodyData.FirstName, incBodyData.LastName, incBodyData.Email,username)
 
 	payload := strings.NewReader(dataToSend)
 	fmt.Println(payload)
@@ -125,7 +134,15 @@ func createUserHandler(response http.ResponseWriter, request *http.Request) {
 	if resp.StatusCode == 201 {
 		fmt.Println("User created successfully")
 
-		userid, err := getUserId(incBodyData.Username, accessToken)
+		//password Generator
+		resPass,err:=password.Generate(4,4,0,false,false)
+		if err!=nil{
+			fmt.Println("Error:",err)
+		}
+		fmt.Println(resPass)
+
+
+		userid, err := getUserId(username, accessToken)
 		if err != nil {
 			fmt.Println("Error:", err)
 		}
@@ -142,7 +159,7 @@ func createUserHandler(response http.ResponseWriter, request *http.Request) {
 			"temporary": false,
 			"type": "password",
 			"value": "%s"
-		}`, incBodyData.Password)
+		}`,resPass)
 
 		payload := strings.NewReader(send)
 		req, err := http.NewRequest(method, url, payload)
@@ -161,10 +178,16 @@ func createUserHandler(response http.ResponseWriter, request *http.Request) {
 		} else {
 			fmt.Println("Failed to set password")
 		}
+	
+
+		
+
+
+
 
 		url = "https://34.93.102.191:18080/auth/admin/realms/camunda-platform/users/" + userId + "/role-mappings/realm"
 		method = "POST"
-		send = `[
+		send= `[
 			{
 				"id": "8ba1339f-ca96-491d-b59f-575a1d248fcd",
 				"name": "Tasklist",
@@ -197,7 +220,7 @@ func createUserHandler(response http.ResponseWriter, request *http.Request) {
 		//  Send Details To The User
 		auth := smtp.PlainAuth("", "tprop48@gmail.com", "ovgo agtz dsdj bwhq", "smtp.gmail.com")
 		to := []string{incBodyData.Email}
-		msgStr := fmt.Sprintf("To: %s\r\nSubject: Your Details\r\n\r\nID:%s \r\n Password:%s\r\n", incBodyData.Email, incBodyData.Username, incBodyData.Password)
+		msgStr := fmt.Sprintf("To: %s\r\nSubject: Your Details\r\n\r\nID:%s \r\n Password:%s\r\n", incBodyData.Email, username,resPass)
 		msg := []byte(msgStr)
 	err = smtp.SendMail("smtp.gmail.com:587", auth, "tprop48@gmail.com", to, msg)
 		if err != nil {
